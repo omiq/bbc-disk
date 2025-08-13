@@ -22,7 +22,7 @@ class File(object):
 
             self.valid = True
             self.length = len(self.content)
-            self.sectors = int(floor(self.length / BYTES_PER_SECTOR) + 1)
+            self.sectors = int(floor((self.length + BYTES_PER_SECTOR - 1) / BYTES_PER_SECTOR))
         except Exception as e:
             self.valid = False
             print(str(e))
@@ -143,9 +143,9 @@ class Surface(object):
             s.word(entry.spec["load_addr"])
             s.word(entry.spec["exec_addr"])
             s.word(entry.length)
-            s.bitpairs(entry.start_sector >> 8, entry.spec["load_addr"] >> 16,
-                       entry.length >> 16, entry.spec["exec_addr"] >> 16)
-            s.byte(entry.start_sector)
+            s.bitpairs(entry.spec["exec_addr"] >> 16, entry.length >> 16,
+                       entry.spec["load_addr"] >> 16, entry.start_sector >> 8)
+            s.byte(entry.start_sector & 0xff)
 
         s.close()
 
@@ -156,26 +156,24 @@ class Surface(object):
         s.close()
 
     def write_catalog(self, catalog):
-
+        # Reset sector sequence for new disk
+        Sector.seq = 0
+        
         self._sector00(catalog)
         self._sector01(catalog)
 
     def write_files(self, catalog):
-        sector = 2
+        # Reset sector sequence for file writing
+        Sector.seq = 2
+        
         for f in catalog:
-            if f.start_sector != sector:
-                raise RuntimeError("Block out of sync")
-
-            while len(f.content):
-                sector += 1
-
-                try:
-                    self._sector(f.content[0:BYTES_PER_SECTOR])
-                except IndexError:
-                    self._sector(f.content[0:BYTES_PER_SECTOR])
-                    break
-
-                f.content = f.content[BYTES_PER_SECTOR:]
+            remaining_content = f.content
+            while len(remaining_content) > 0:
+                # Write up to BYTES_PER_SECTOR bytes
+                chunk_size = min(len(remaining_content), BYTES_PER_SECTOR)
+                self._sector(remaining_content[0:chunk_size])
+                
+                remaining_content = remaining_content[chunk_size:]
 
             print("[%s] " % f.spec["name"])
 
@@ -192,7 +190,13 @@ class FileSpec(argparse.Action):
         try:
             return int(data[field], 16)
         except IndexError:
-            return 0
+            # Default load and exec addresses for BBC BASIC programs
+            if field == 1:  # load_addr
+                return 0x1900
+            elif field == 2:  # exec_addr
+                return 0x1900
+            else:
+                return 0
 
     def _decode(self, name):
         if len(name) > 1 and name[1] == ".":
@@ -232,7 +236,7 @@ def main():
                         " is defined as [DIR.]FILENAME[:LOADADDR[:EXECADDR]]")
     parser.add_argument("-d", "--dest", default="out.ssd", metavar="FILE",
                         help=".ssd file to write to")
-    parser.add_argument("-t", "--title", default="XX",
+    parser.add_argument("-t", "--title", default="",
                         help="disk title")
     parser.add_argument("-o", "--opt", choices=("load", "run", "exec"),
                         default=None, help="boot option")
@@ -246,6 +250,8 @@ def main():
         if f.valid:
             catalog.append(f)
             start_sector = start_sector + f.sectors
+    
+
 
     if len(catalog) == 0:
         exit("No files to process")
