@@ -16,6 +16,14 @@ class File(object):
         self.spec = spec
         self.start_sector = start_sector
 
+        # Special handling for !BOOT files (created in memory)
+        if self.spec["file"] == "!BOOT":
+            self.valid = True
+            self.content = bytearray()
+            self.length = 0
+            self.sectors = 0
+            return
+
         try:
             with open(self.spec["file"], "rb") as f:
                 self.content = f.read()
@@ -176,6 +184,40 @@ class Surface(object):
                 remaining_content = remaining_content[chunk_size:]
 
             print("[%s] " % f.spec["name"])
+    
+    def create_boot_file(self, catalog):
+        """Create a !BOOT file if boot options are specified"""
+        if self.opt is None:
+            return
+            
+        # Create !BOOT file content based on boot option
+        if self.opt == "load":
+            boot_content = "*LOAD " + catalog[0].spec["name"] + "\r"
+        elif self.opt == "run":
+            boot_content = "*RUN " + catalog[0].spec["name"] + "\r"
+        elif self.opt == "exec":
+            boot_content = "*EXEC " + catalog[0].spec["name"] + "\r"
+        else:
+            return
+            
+        # Create !BOOT file entry
+        boot_spec = {
+            "directory": "$",
+            "file": "!BOOT",
+            "name": "!BOOT",
+            "load_addr": 0x1900,
+            "exec_addr": 0x1900
+        }
+        
+        # Create the boot file with in-memory content
+        boot_file = File(boot_spec, 0)
+        # Override the file reading since we're creating the content in memory
+        boot_file.content = bytearray(boot_content, 'latin-1')
+        boot_file.valid = True
+        boot_file.length = len(boot_file.content)
+        boot_file.sectors = int(floor((boot_file.length + BYTES_PER_SECTOR - 1) / BYTES_PER_SECTOR))
+        
+        return boot_file
 
 
 class FileSpec(argparse.Action):
@@ -239,7 +281,7 @@ def main():
     parser.add_argument("-t", "--title", default="",
                         help="disk title")
     parser.add_argument("-o", "--opt", choices=("load", "run", "exec"),
-                        default=None, help="boot option")
+                        default=None, help="boot option (use *OPT4,3 in emulator to enable)")
 
     args = parser.parse_args()
 
@@ -250,13 +292,22 @@ def main():
         if f.valid:
             catalog.append(f)
             start_sector = start_sector + f.sectors
-    
-
 
     if len(catalog) == 0:
         exit("No files to process")
 
     surface = Surface(args.dest, args.title, args.opt)
+
+    # Create !BOOT file if boot option is specified
+    if args.opt is not None:
+        boot_file = surface.create_boot_file(catalog)
+        if boot_file:
+            # Add !BOOT file to the beginning of the catalog
+            boot_file.start_sector = START_SECTOR
+            catalog.insert(0, boot_file)
+            # Adjust start sectors for other files
+            for f in catalog[1:]:
+                f.start_sector = boot_file.start_sector + boot_file.sectors
 
     surface.write_catalog(catalog)
     surface.write_files(catalog)
