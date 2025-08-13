@@ -144,8 +144,16 @@ class Surface(object):
 
         sector_count = TRACK_COUNT * SECTORS_PER_TRACK
         boot_opts = {None: 0, "load": 1, "run": 2, "exec": 3}
-
-        s.bitpairs(0, boot_opts[self.opt], 0, sector_count >> 8)
+        
+        # Set boot option for auto-boot functionality
+        # For auto-boot to work properly, we need to set it to 3 (exec)
+        # even when using "run" option, as the !BOOT file handles the actual command
+        if self.opt in ["run", "exec"]:
+            boot_option = 3  # Use exec mode for auto-boot
+        else:
+            boot_option = boot_opts[self.opt] if self.opt else 0
+        
+        s.bitpairs(0, boot_option, 0, sector_count >> 8)
         s.byte(sector_count & 0xff)
         for entry in catalog:
             s.word(entry.spec["load_addr"])
@@ -196,18 +204,22 @@ class Surface(object):
         elif self.opt == "run":
             boot_content = "*RUN " + catalog[0].spec["name"] + "\r"
         elif self.opt == "exec":
-            boot_content = "*EXEC " + catalog[0].spec["name"] + "\r"
+            # For exec option, use *RUN to execute the program
+            boot_content = "*RUN " + catalog[0].spec["name"] + "\r"
         else:
             return
             
-        # Create !BOOT file entry
+        # Create !BOOT file entry with auto-boot flag
         boot_spec = {
-            "directory": "$",
+            "directory": "$",  # Will be modified to include auto-boot flag
             "file": "!BOOT",
             "name": "!BOOT",
             "load_addr": 0x1900,
             "exec_addr": 0x1900
         }
+        
+        # Set the auto-boot flag in the directory byte (bit 7 = boot file)
+        boot_spec["directory"] = chr(ord("$") | 0x80)
         
         # Create the boot file with in-memory content
         boot_file = File(boot_spec, 0)
@@ -281,7 +293,7 @@ def main():
     parser.add_argument("-t", "--title", default="",
                         help="disk title")
     parser.add_argument("-o", "--opt", choices=("load", "run", "exec"),
-                        default=None, help="boot option (use *OPT4,3 in emulator to enable)")
+                        default=None, help="boot option: load=load only, run=load and run, exec=auto-execute first file")
 
     args = parser.parse_args()
 
