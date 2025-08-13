@@ -227,8 +227,8 @@ class FileSpec(argparse.Action):
 def main():
     parser = argparse.ArgumentParser(description="Build a BBC .ssd disk")
 
-    parser.add_argument("files", nargs="+", metavar="INSPEC", action=FileSpec,
-                        help="A file to add to the ssd, where INSPEC"
+    parser.add_argument("files", nargs="+", metavar="FILE_SPEC", action=FileSpec,
+                        help="A file to add to the ssd, where FILE_SPEC"
                         " is defined as [DIR.]FILENAME[:LOADADDR[:EXECADDR]]")
     parser.add_argument("-d", "--dest", default="out.ssd", metavar="FILE",
                         help=".ssd file to write to")
