@@ -17,15 +17,22 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Debug - List files
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Files in directory:"
+          ls -la
+          echo "Python version:"
+          python --version
+
       - name: Build Executable with Nuitka
         uses: Nuitka/Nuitka-Action@v1.3
         with:
-          nuitka-version: main
+          nuitka-version: latest
           script-name: makedisk.py
-          # many more Nuitka options available, see action doc, but it's best
-          # to use nuitka-project: options in your code, so e.g. you can make
-          # a difference for macOS and create an app bundle there.
           mode: onefile
+          onefile-tempdir-spec: "%TEMP%"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
