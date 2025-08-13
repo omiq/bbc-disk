@@ -1,3 +1,5 @@
+name: Build BBC Disk Creator
+
 jobs:
   build:
     strategy:
@@ -16,7 +18,7 @@ jobs:
          python-version: '3.10'
 
       - name: Build Executable with Nuitka
-      uses: Nuitka/Nuitka-Action@main
+      uses: Nuitka/Nuitka-Action@v1.3
       with:
          nuitka-version: main
          script-name: makedisk.py
