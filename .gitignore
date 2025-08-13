@@ -1,3 +1,6 @@
 .pyc
 *.ssd
 *.DS_Store
+makedisk.onefile-build
+makedisk.dist
+makedisk.build
